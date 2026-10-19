@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.m.outputs.version }}
       tag: ${{ steps.m.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - id: m
         shell: bash
@@ -78,7 +78,7 @@ jobs:
             kind: linux
             asset: mssql-transfer-linux-x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
