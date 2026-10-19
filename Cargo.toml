@@ -1,0 +1,34 @@
+[package]
+name = "mssql-transfer"
+version = "0.1.0"
+edition = "2021"
+description = "SQL Server database & table import/export GUI tool built with Rust + Slint"
+license = "MIT"
+
+[dependencies]
+slint = "1.18"
+tiberius = { version = "0.13", default-features = false, features = ["tds80", "chrono", "native-tls", "winauth"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "sync", "macros", "io-util"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures-util = "0.3"
+chrono = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1.4"
+anyhow = "1"
+rfd = "0.17"
+dirs = "6"
+uuid = { version = "1", features = ["v4"] }
+png = "0.17"
+rust_xlsxwriter = "0.100"
+calamine = "0.37"
+walkdir = "2"
+flate2 = "1"
+
+[build-dependencies]
+slint-build = "1.18"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+strip = true

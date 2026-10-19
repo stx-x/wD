@@ -1,0 +1,11 @@
+erDiagram
+    dbo_Customers {
+        int Id PK
+        nvarchar Name
+        decimal Balance
+    }
+    dbo_Orders {
+        bigint Id PK
+        int CustomerId FK
+    }
+    dbo_Customers ||--o{ dbo_Orders : "CustomerId"

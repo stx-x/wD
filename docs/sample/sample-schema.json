@@ -1,0 +1,143 @@
+{
+  "database": {
+    "collation": "Chinese_PRC_CI_AS",
+    "compatibilityLevel": 160,
+    "edition": "Enterprise",
+    "name": "SalesDB",
+    "recoveryModel": "FULL",
+    "version": "16.0.4135"
+  },
+  "generatedBy": "MSSQL Transfer Studio",
+  "modules": [],
+  "sequences": [],
+  "tables": [
+    {
+      "checks": [],
+      "columns": [
+        {
+          "baseType": "int",
+          "collation": null,
+          "computed": null,
+          "default": null,
+          "description": "主键",
+          "identity": true,
+          "kind": "整数",
+          "name": "Id",
+          "nullable": false,
+          "type": "int"
+        },
+        {
+          "baseType": "nvarchar",
+          "collation": "Chinese_PRC_CI_AS",
+          "computed": null,
+          "default": null,
+          "description": null,
+          "identity": false,
+          "kind": "文本",
+          "name": "Name",
+          "nullable": false,
+          "type": "nvarchar(50)"
+        },
+        {
+          "baseType": "decimal",
+          "collation": null,
+          "computed": null,
+          "default": "((0))",
+          "description": null,
+          "identity": false,
+          "kind": "定点小数",
+          "name": "Balance",
+          "nullable": true,
+          "type": "decimal(18,2)"
+        }
+      ],
+      "description": "客户主表",
+      "foreignKeys": [],
+      "indexes": [
+        {
+          "columns": [
+            "Name"
+          ],
+          "includes": [],
+          "name": "IX_Customers_Name",
+          "primaryKey": false,
+          "unique": false
+        }
+      ],
+      "name": "Customers",
+      "primaryKey": [
+        "Id"
+      ],
+      "rowCount": 12480,
+      "samples": [
+        [
+          "1",
+          "张伟",
+          "0.00"
+        ]
+      ],
+      "schema": "dbo"
+    },
+    {
+      "checks": [
+        {
+          "definition": "([CustomerId]>(0))",
+          "name": "CK_Orders_CustomerId"
+        }
+      ],
+      "columns": [
+        {
+          "baseType": "bigint",
+          "collation": null,
+          "computed": null,
+          "default": null,
+          "description": null,
+          "identity": true,
+          "kind": "整数",
+          "name": "Id",
+          "nullable": false,
+          "type": "bigint"
+        },
+        {
+          "baseType": "int",
+          "collation": null,
+          "computed": null,
+          "default": null,
+          "description": null,
+          "identity": false,
+          "kind": "整数",
+          "name": "CustomerId",
+          "nullable": false,
+          "type": "int"
+        }
+      ],
+      "description": null,
+      "foreignKeys": [
+        {
+          "columns": [
+            "CustomerId"
+          ],
+          "name": "FK_Orders_Customers",
+          "onDelete": "CASCADE",
+          "onUpdate": "NO_ACTION",
+          "references": {
+            "columns": [
+              "Id"
+            ],
+            "schema": "dbo",
+            "table": "Customers"
+          }
+        }
+      ],
+      "indexes": [],
+      "name": "Orders",
+      "primaryKey": [
+        "Id"
+      ],
+      "rowCount": 89301,
+      "samples": [],
+      "schema": "dbo"
+    }
+  ],
+  "views": []
+}

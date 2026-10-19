@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（不带 v，留空则读取 Cargo.toml）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # ------------------------------------------------------------------ 版本号
+  meta:
+    name: 解析版本
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.m.outputs.version }}
+      tag: ${{ steps.m.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: m
+        shell: bash
+        run: |
+          set -euo pipefail
+          V="${{ github.event.inputs.version }}"
+          if [ -z "${V}" ]; then
+            if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+              V="${GITHUB_REF_NAME#v}"
+            else
+              V="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+            fi
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${V}" >> "$GITHUB_OUTPUT"
+          echo "本次发布版本：v${V}"
+
+  # ------------------------------------------------------------------ 编译
+  build:
+    name: 构建 ${{ matrix.label }}
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            kind: macos
+            asset: mssql-transfer-macos-arm64
+          - label: macOS x86_64
+            os: macos-14
+            target: x86_64-apple-darwin
+            kind: macos
+            asset: mssql-transfer-macos-x86_64
+          - label: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            kind: windows
+            asset: mssql-transfer-windows-x86_64
+          - label: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            kind: linux
+            asset: mssql-transfer-linux-x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: 安装系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libfontconfig1-dev libfreetype6-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: 编译
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: 冒烟测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/mssql-transfer"
+          if [ -f "${BIN}.exe" ]; then BIN="${BIN}.exe"; fi
+          "${BIN}" --version
+
+      # macOS：打成 .app 再压缩（保留 bundle 结构）
+      - name: 打包 .app
+        if: matrix.kind == 'macos'
+        shell: bash
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          BIN="target/${TARGET}/release/mssql-transfer" \
+            OUT_DIR="dist/${TARGET}" \
+            VERSION="${VERSION}" \
+            bash scripts/bundle-macos.sh
+          ditto -c -k --sequesterRsrc --keepParent \
+            "dist/${TARGET}/MSSQL Transfer Studio.app" "${ASSET}.zip"
+
+      - name: 打包 zip
+        if: matrix.kind == 'windows'
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/$env:TARGET/release/mssql-transfer.exe" "dist/mssql-transfer.exe"
+          Compress-Archive -Path "dist/mssql-transfer.exe" -DestinationPath "$env:ASSET.zip" -Force
+
+      - name: 打包 tar.gz
+        if: matrix.kind == 'linux'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          tar -czf "${ASSET}.tar.gz" -C "target/${TARGET}/release" mssql-transfer
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            *.zip
+            *.tar.gz
+
+  # ------------------------------------------------------------------ 发布
+  release:
+    name: 发布 Release
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载全部产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 生成校验和
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          ls -lh
+          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: MSSQL Transfer Studio ${{ needs.meta.outputs.tag }}
+          files: artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            SQL Server 数据库 / 表 导入导出工具 · Rust + Slint
+
+            | 平台 | 下载 | 说明 |
+            | --- | --- | --- |
+            | macOS Apple Silicon | `mssql-transfer-macos-arm64.zip` | 解压后得到 `MSSQL Transfer Studio.app` |
+            | macOS Intel | `mssql-transfer-macos-x86_64.zip` | 同上 |
+            | Windows x64 | `mssql-transfer-windows-x86_64.zip` | 解压后直接运行 `mssql-transfer.exe` |
+            | Linux x64 | `mssql-transfer-linux-x86_64.tar.gz` | 解压后 `chmod +x mssql-transfer && ./mssql-transfer` |
+
+            **macOS 首次打开**：应用未签名，若提示「已损坏」或「无法验证开发者」，执行一次
+
+            ```bash
+            xattr -dr com.apple.quarantine "/Applications/MSSQL Transfer Studio.app"
+            ```
+
+            **Linux 运行依赖**：`libfontconfig1`、`libfreetype6`、`libssl3`（Ubuntu 22.04+ / Debian 12+ 默认具备）。

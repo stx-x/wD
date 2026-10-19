@@ -1,0 +1,1819 @@
+// ============================================================
+//  MSSQL Transfer Studio — Slint UI
+//  左侧分组导航 + 右侧配置面板 | 窗口可自由缩放
+// ============================================================
+
+import { CheckBox, ComboBox, LineEdit, ProgressIndicator, ScrollView } from "std-widgets.slint";
+
+global Theme {
+    out property <color> bg: #f4f5f7;
+    out property <color> card: #ffffff;
+    out property <color> nav-bg: #fbfbfc;
+    out property <color> border: #e3e6eb;
+    out property <color> border-strong: #d3d8e0;
+    out property <color> text: #1c2430;
+    out property <color> text-2: #5b6472;
+    out property <color> text-3: #8b94a3;
+    out property <color> accent: #2c5c8f;
+    out property <color> accent-hover: #35699f;
+    out property <color> accent-press: #234b76;
+    out property <color> accent-soft: #eef3f9;
+    out property <color> ok: #2f7d5b;
+    out property <color> warn: #a86a1f;
+    out property <color> err: #a63a3a;
+}
+
+// ---------- 基础控件 ----------
+
+component PrimaryButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 32px;
+    min-width: 104px;
+    border-radius: 6px;
+    background: !root.enabled ? #c8ced8 : (ta.pressed ? Theme.accent-press : (ta.has-hover ? Theme.accent-hover : Theme.accent));
+    Text {
+        text: root.label;
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component SecondaryButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <bool> danger: false;
+    callback clicked();
+    height: 32px;
+    min-width: 80px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: ta.has-hover && root.enabled ? Theme.border-strong : Theme.border;
+    background: !root.enabled ? #f7f8fa : (ta.pressed ? #eef0f3 : (ta.has-hover ? #fafbfc : Theme.card));
+    Text {
+        text: root.label;
+        color: !root.enabled ? Theme.text-3 : (root.danger ? Theme.err : Theme.text);
+        font-size: 13px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component Card inherits Rectangle {
+    border-radius: 8px;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+}
+
+component SectionTitle inherits Text {
+    font-size: 12px;
+    font-weight: 600;
+    color: Theme.text-2;
+    height: 20px;
+    vertical-alignment: center;
+}
+
+component PageTitle inherits Text {
+    font-size: 17px;
+    font-weight: 600;
+    color: Theme.text;
+    height: 34px;
+    vertical-alignment: center;
+}
+
+component LabeledInput inherits VerticalLayout {
+    in property <string> label;
+    in-out property <string> text <=> input.text;
+    in property <bool> secret: false;
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: 11px;
+        color: Theme.text-3;
+        height: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    input := LineEdit {
+        placeholder-text: root.placeholder;
+        enabled: root.enabled;
+        height: 30px;
+        input-type: root.secret ? InputType.password : InputType.text;
+    }
+}
+
+component LabeledCombo inherits VerticalLayout {
+    in property <string> label;
+    in property <[string]> items;
+    in-out property <int> index <=> combo.current-index;
+    in property <bool> enabled: true;
+    callback picked(string);
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: 11px;
+        color: Theme.text-3;
+        height: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    combo := ComboBox {
+        model: root.items;
+        enabled: root.enabled;
+        height: 30px;
+        selected(v) => { root.picked(v); }
+    }
+}
+
+component NumberInput inherits VerticalLayout {
+    in property <string> label;
+    in-out property <string> text <=> input.text;
+    in property <bool> enabled: true;
+    spacing: 4px;
+    Text {
+        text: root.label;
+        font-size: 11px;
+        color: Theme.text-3;
+        height: 14px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    input := LineEdit {
+        enabled: root.enabled;
+        height: 30px;
+        input-type: InputType.number;
+    }
+}
+
+component OptionRow inherits HorizontalLayout {
+    in property <string> label;
+    in-out property <bool> checked <=> box.checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    spacing: 6px;
+    alignment: start;
+    height: 26px;
+    box := CheckBox {
+        text: root.label;
+        enabled: root.enabled;
+        toggled => { root.toggled(box.checked); }
+    }
+}
+
+// ---------- 导航 ----------
+
+component NavGroup inherits Rectangle {
+    in property <string> label;
+    height: 34px;
+    Text {
+        x: 16px;
+        y: 8px;
+        width: parent.width - 24px;
+        height: 20px;
+        text: root.label;
+        font-size: 11px;
+        font-weight: 600;
+        color: Theme.text-3;
+        vertical-alignment: bottom;
+        overflow: elide;
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 32px;
+    background: !root.enabled ? transparent : (root.active ? Theme.accent-soft : (ta.has-hover ? #f1f3f6 : transparent));
+    Rectangle {
+        x: 0;
+        y: 6px;
+        width: 2px;
+        height: 20px;
+        background: root.active ? Theme.accent : transparent;
+    }
+    Text {
+        x: 16px;
+        width: parent.width - 24px;
+        text: root.label;
+        font-size: 13px;
+        font-weight: root.active ? 600 : 400;
+        color: !root.enabled ? Theme.text-3 : (root.active ? Theme.accent-press : Theme.text-2);
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// ---------- 数据结构 ----------
+
+export struct ObjectItem {
+    display: string,
+    kind: string,
+    rows: int,
+    rows-text: string,
+    checked: bool,
+    schema: string,
+    name: string,
+}
+
+export struct PlanItem {
+    note: string,
+    format: string,
+    target: string,
+    sheet: string,
+    enabled: bool,
+}
+
+// ---------- 主窗口 ----------
+
+export component AppWindow inherits Window {
+    title: "MSSQL Transfer Studio";
+    min-width: 1080px;
+    min-height: 680px;
+    background: Theme.bg;
+    default-font-family: "PingFang SC";
+    default-font-size: 13px;
+
+    // ===== 连接配置 =====
+    in-out property <string> server: "localhost";
+    in-out property <string> port: "1433";
+    in-out property <string> instance: "";
+    in-out property <int> auth-index: 0;
+    in-out property <string> username: "sa";
+    in-out property <string> password: "";
+    in-out property <string> database: "master";
+    in-out property <int> encrypt-index: 0;
+    in-out property <bool> trust-cert: true;
+    in-out property <string> conn-timeout: "15";
+    in-out property <string> app-name: "MSSQL Transfer Studio";
+
+    // ===== 连接状态 =====
+    in-out property <bool> connected: false;
+    in-out property <bool> connecting: false;
+    in-out property <string> status-text: "未连接";
+    in-out property <string> server-info: "";
+    in-out property <[string]> databases: [];
+    in-out property <int> db-index: 0;
+
+    // ===== 对象 =====
+    in-out property <[ObjectItem]> objects: [];
+    in-out property <string> obj-filter: "";
+    in-out property <int> selected-count: 0;
+    in-out property <int> total-count: 0;
+    in-out property <bool> loading-objects: false;
+
+    // ===== 结构导出 =====
+    in-out property <string> schema-dir: "";
+    in-out property <int> schema-format: 0;
+    in-out property <bool> schema-use-selection: false;
+    in-out property <string> schema-samples: "3";
+    in-out property <string> schema-max-len: "60";
+    in-out property <bool> schema-pk: true;
+    in-out property <bool> schema-fk: true;
+    in-out property <bool> schema-idx: true;
+    in-out property <bool> schema-checks: true;
+    in-out property <bool> schema-defaults: true;
+    in-out property <bool> schema-desc: true;
+    in-out property <bool> schema-rows: true;
+    in-out property <bool> schema-views: true;
+    in-out property <bool> schema-procs: false;
+    in-out property <bool> schema-triggers: false;
+    in-out property <bool> schema-seq: true;
+    in-out property <bool> schema-system: false;
+    in-out property <bool> schema-split: false;
+    in-out property <string> schema-prompt: "";
+    in-out property <string> schema-filename: "";
+    in-out property <string> schema-preview: "";
+
+    // ===== 导出 =====
+    in-out property <string> export-dir: "";
+    in-out property <int> export-format: 0;
+    in-out property <int> export-scope: 0;
+    in-out property <int> export-what: 0;
+    in-out property <string> export-batch: "1000";
+    in-out property <string> export-null: "NULL";
+    in-out property <int> export-delimiter: 0;
+    in-out property <bool> export-header: true;
+    in-out property <bool> export-drop: false;
+    in-out property <bool> export-identity: false;
+    in-out property <bool> export-quote-all: false;
+    in-out property <bool> export-bom: false;
+    in-out property <bool> export-create-db: false;
+    in-out property <bool> export-schema-qualified: true;
+    in-out property <string> export-file-prefix: "";
+    in-out property <string> export-where: "";
+    in-out property <string> export-limit: "0";
+    in-out property <string> export-exclude: "";
+    in-out property <bool> export-gzip: false;
+    in-out property <bool> excel-freeze: true;
+    in-out property <bool> excel-autofit: true;
+    in-out property <bool> excel-bold: true;
+
+    // ===== 备份 =====
+    in-out property <string> backup-dir: "";
+    in-out property <string> backup-file: "";
+    in-out property <int> backup-kind: 0;
+    in-out property <bool> backup-compress: true;
+    in-out property <bool> backup-checksum: true;
+    in-out property <bool> backup-init: true;
+    in-out property <bool> backup-copy-only: false;
+    in-out property <string> backup-desc: "";
+    in-out property <string> backup-stats: "10";
+    in-out property <bool> backup-verify: true;
+    in-out property <string> backup-info: "";
+
+    // ===== 导入 =====
+    in-out property <string> import-path: "";
+    in-out property <int> import-format: 0;
+    in-out property <string> import-target: "";
+    in-out property <string> import-batch: "500";
+    in-out property <bool> import-truncate: false;
+    in-out property <bool> import-transaction: true;
+    in-out property <bool> import-skip-errors: false;
+    in-out property <bool> import-create-table: false;
+    in-out property <int> import-column-mode: 0;
+    in-out property <string> import-null: "";
+    in-out property <bool> import-header: true;
+    in-out property <string> import-max-errors: "50";
+    in-out property <string> import-preview: "";
+    in-out property <bool> import-recursive: true;
+    in-out property <string> import-glob: "";
+    in-out property <string> import-strip-prefix: "";
+    in-out property <string> import-strip-suffix: "";
+    in-out property <string> import-schema: "dbo";
+    in-out property <int> import-on-existing: 0;
+    in-out property <bool> import-all-sheets: true;
+    in-out property <[PlanItem]> import-plan: [];
+    in-out property <int> plan-count: 0;
+
+    // ===== 运行状态 =====
+    in-out property <float> progress: 0;
+    in-out property <string> progress-text: "";
+    in-out property <string> rows-text: "";
+    in-out property <string> bytes-text: "";
+    in-out property <bool> running: false;
+    in-out property <string> log-text: "";
+    in-out property <int> nav-index: 0;
+
+    // ===== 回调 =====
+    callback connect-clicked();
+    callback disconnect-clicked();
+    callback test-clicked();
+    callback refresh-clicked();
+    callback db-picked(string);
+    callback filter-edited(string);
+    callback object-toggled(int);
+    callback select-all-clicked();
+    callback select-none-clicked();
+    callback schema-browse-clicked();
+    callback schema-preview-clicked();
+    callback start-schema-clicked();
+    callback export-browse-clicked();
+    callback export-preview-clicked();
+    callback start-export-clicked();
+    callback open-dir-clicked();
+    callback backup-dir-query-clicked();
+    callback start-backup-clicked();
+    callback backup-history-clicked();
+    callback import-browse-file-clicked();
+    callback import-browse-dir-clicked();
+    callback scan-import-clicked();
+    callback import-preview-clicked();
+    callback start-import-clicked();
+    callback plan-toggled(int);
+    callback plan-clear-clicked();
+    callback cancel-clicked();
+    callback clear-log-clicked();
+
+    VerticalLayout {
+        spacing: 0px;
+
+        // ================= 顶栏 =================
+        Rectangle {
+            height: 52px;
+            background: Theme.card;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 14px;
+
+                Text {
+                    text: "MSSQL Transfer Studio";
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    width: 1px;
+                    height: 16px;
+                    background: Theme.border;
+                }
+                Text {
+                    text: root.connected ? root.database : "";
+                    font-size: 12px;
+                    color: Theme.text-3;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Text {
+                    text: root.server-info;
+                    font-size: 11px;
+                    color: Theme.text-3;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    max-width: 360px;
+                }
+                Rectangle {
+                    width: 6px;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: root.connecting ? Theme.warn : (root.connected ? Theme.ok : Theme.border-strong);
+                }
+                Text {
+                    text: root.status-text;
+                    font-size: 12px;
+                    color: root.connected ? Theme.text-2 : Theme.text-3;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // ================= 主体 =================
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 0px;
+
+            // ---------- 导航 ----------
+            Rectangle {
+                width: 196px;
+                background: Theme.nav-bg;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                VerticalLayout {
+                    padding-top: 14px;
+                    padding-bottom: 12px;
+                    spacing: 0px;
+
+                    NavGroup { label: "连接"; }
+                    NavItem { label: "连接设置"; active: root.nav-index == 0; clicked => { root.nav-index = 0; } }
+
+                    NavGroup { label: "结构"; }
+                    NavItem { label: "对象浏览"; active: root.nav-index == 1; clicked => { root.nav-index = 1; } }
+                    NavItem { label: "结构导出"; active: root.nav-index == 2; enabled: root.connected; clicked => { root.nav-index = 2; } }
+
+                    NavGroup { label: "传输"; }
+                    NavItem { label: "数据导出"; active: root.nav-index == 3; clicked => { root.nav-index = 3; } }
+                    NavItem { label: "BAK 备份"; active: root.nav-index == 4; enabled: root.connected; clicked => { root.nav-index = 4; } }
+                    NavItem { label: "数据导入"; active: root.nav-index == 5; clicked => { root.nav-index = 5; } }
+
+                    NavGroup { label: "诊断"; }
+                    NavItem { label: "执行日志"; active: root.nav-index == 6; clicked => { root.nav-index = 6; } }
+
+                    Rectangle { vertical-stretch: 1; }
+                }
+            }
+
+            // ---------- 内容 ----------
+            content := Rectangle {
+                horizontal-stretch: 1;
+                background: Theme.bg;
+
+                // ============ 0. 连接设置 ============
+                if root.nav-index == 0 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "连接设置"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "服务器"; }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledInput {
+                                        label: "主机";
+                                        text <=> root.server;
+                                        placeholder: "localhost 或 192.168.1.10";
+                                        horizontal-stretch: 2;
+                                        min-width: 140px;
+                                    }
+                                    NumberInput { label: "端口"; text <=> root.port; width: 80px; }
+                                    LabeledInput {
+                                        label: "实例";
+                                        text <=> root.instance;
+                                        placeholder: "SQLEXPRESS";
+                                        width: 130px;
+                                    }
+                                    LabeledCombo {
+                                        label: "加密";
+                                        items: ["可选（协商）", "强制 TLS"];
+                                        index <=> root.encrypt-index;
+                                        width: 124px;
+                                    }
+                                    NumberInput { label: "超时（秒）"; text <=> root.conn-timeout; width: 96px; }
+                                }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "身份验证";
+                                        items: ["SQL Server 身份验证", "Windows 集成验证"];
+                                        index <=> root.auth-index;
+                                        width: 186px;
+                                    }
+                                    LabeledInput {
+                                        label: "用户名";
+                                        text <=> root.username;
+                                        enabled: root.auth-index == 0;
+                                        width: 140px;
+                                    }
+                                    LabeledInput {
+                                        label: "密码";
+                                        text <=> root.password;
+                                        secret: true;
+                                        enabled: root.auth-index == 0;
+                                        horizontal-stretch: 1;
+                                        min-width: 120px;
+                                    }
+                                    LabeledInput {
+                                        label: "应用程序名";
+                                        text <=> root.app-name;
+                                        horizontal-stretch: 1;
+                                        min-width: 140px;
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: "证书"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        OptionRow {
+                                            label: "信任服务器证书";
+                                            checked: root.trust-cert;
+                                            toggled(v) => { root.trust-cert = v; }
+                                            height: 30px;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PrimaryButton {
+                                label: root.connecting ? "连接中" : "连接";
+                                enabled: !root.connecting;
+                                min-width: 112px;
+                                clicked => { root.connect-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "测试连接";
+                                enabled: !root.connecting;
+                                min-width: 96px;
+                                clicked => { root.test-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "断开";
+                                enabled: root.connected;
+                                min-width: 72px;
+                                danger: true;
+                                clicked => { root.disconnect-clicked(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "数据库"; }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "当前数据库";
+                                        items: root.databases;
+                                        index <=> root.db-index;
+                                        enabled: root.connected && root.databases.length > 0;
+                                        picked(v) => { root.db-picked(v); }
+                                        horizontal-stretch: 1;
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton {
+                                            label: "读取对象";
+                                            enabled: root.connected && !root.running;
+                                            min-width: 96px;
+                                            clicked => { root.refresh-clicked(); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============ 1. 对象浏览 ============
+                if root.nav-index == 1 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "对象浏览"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 14px;
+                                spacing: 10px;
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    LabeledCombo {
+                                        label: "数据库";
+                                        items: root.databases;
+                                        index <=> root.db-index;
+                                        enabled: root.connected && root.databases.length > 0;
+                                        picked(v) => { root.db-picked(v); }
+                                        width: 230px;
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text { text: "过滤"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        LineEdit {
+                                            placeholder-text: "按名称过滤";
+                                            text <=> root.obj-filter;
+                                            height: 30px;
+                                            edited(v) => { root.filter-edited(v); }
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        HorizontalLayout {
+                                            spacing: 6px;
+                                            SecondaryButton {
+                                                label: "刷新";
+                                                min-width: 64px;
+                                                enabled: root.connected && !root.running;
+                                                clicked => { root.refresh-clicked(); }
+                                            }
+                                            SecondaryButton {
+                                                label: "全选";
+                                                min-width: 64px;
+                                                enabled: root.objects.length > 0;
+                                                clicked => { root.select-all-clicked(); }
+                                            }
+                                            SecondaryButton {
+                                                label: "清空";
+                                                min-width: 64px;
+                                                enabled: root.objects.length > 0;
+                                                clicked => { root.select-none-clicked(); }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 32px;
+                                    background: Theme.nav-bg;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: root.loading-objects ? "正在读取" : ("已选 " + root.selected-count + " / " + root.total-count);
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                        }
+                                        Text {
+                                            text: "行数";
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            width: 92px;
+                                            horizontal-alignment: right;
+                                        }
+                                    }
+                                }
+
+                                for obj[i] in root.objects : Rectangle {
+                                    height: 34px;
+                                    background: row-ta.has-hover ? Theme.nav-bg : transparent;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        spacing: 10px;
+
+                                        Rectangle {
+                                            width: 15px;
+                                            height: 15px;
+                                            border-radius: 3px;
+                                            border-width: 1px;
+                                            border-color: obj.checked ? Theme.accent : Theme.border-strong;
+                                            background: obj.checked ? Theme.accent : Theme.card;
+                                            Text {
+                                                text: "✓";
+                                                color: #ffffff;
+                                                font-size: 10px;
+                                                font-weight: 700;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                visible: obj.checked;
+                                            }
+                                        }
+                                        Text {
+                                            text: obj.display;
+                                            font-size: 13px;
+                                            color: Theme.text;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: obj.kind == "view" ? "视图" : "表";
+                                            font-size: 11px;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            width: 34px;
+                                        }
+                                        Text {
+                                            text: obj.rows-text;
+                                            font-size: 11px;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            width: 92px;
+                                            horizontal-alignment: right;
+                                        }
+                                    }
+                                    row-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.object-toggled(i); }
+                                    }
+                                }
+
+                                if root.objects.length == 0 : VerticalLayout {
+                                    height: 140px;
+                                    alignment: center;
+                                    Text {
+                                        text: root.connected ? "没有匹配的对象" : "尚未连接数据库";
+                                        font-size: 12px;
+                                        color: Theme.text-3;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============ 2. 结构导出 ============
+                if root.nav-index == 2 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "结构导出"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "输出"; }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text { text: "目录"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        LineEdit { text <=> root.schema-dir; height: 30px; placeholder-text: "选择输出文件夹"; }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton { label: "浏览"; width: 72px; clicked => { root.schema-browse-clicked(); } }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton {
+                                            label: "打开";
+                                            width: 64px;
+                                            enabled: root.schema-dir != "";
+                                            clicked => { root.open-dir-clicked(); }
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "格式";
+                                        items: ["AI 上下文（推荐）", "Markdown 文档", "T-SQL DDL 脚本", "JSON 元数据", "Mermaid ER 图"];
+                                        index <=> root.schema-format;
+                                        horizontal-stretch: 2;
+                                    }
+                                    LabeledInput {
+                                        label: "文件名";
+                                        text <=> root.schema-filename;
+                                        placeholder: "留空自动命名";
+                                        horizontal-stretch: 2;
+                                    }
+                                    NumberInput {
+                                        label: "采样行数";
+                                        text <=> root.schema-samples;
+                                        width: 96px;
+                                    }
+                                    NumberInput {
+                                        label: "单值长度上限";
+                                        text <=> root.schema-max-len;
+                                        width: 110px;
+                                    }
+                                }
+
+                                LabeledInput {
+                                    label: "提示词（写入文档开头）";
+                                    text <=> root.schema-prompt;
+                                    placeholder: "例如：你是 T-SQL 专家，请只输出 SQL";
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "范围"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow {
+                                            label: "仅导出已勾选的对象";
+                                            checked: root.schema-use-selection;
+                                            toggled(v) => { root.schema-use-selection = v; }
+                                        }
+                                        OptionRow {
+                                            label: "包含视图";
+                                            checked: root.schema-views;
+                                            toggled(v) => { root.schema-views = v; }
+                                        }
+                                        OptionRow {
+                                            label: "包含系统对象";
+                                            checked: root.schema-system;
+                                            toggled(v) => { root.schema-system = v; }
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow {
+                                            label: "包含存储过程与函数定义";
+                                            checked: root.schema-procs;
+                                            toggled(v) => { root.schema-procs = v; }
+                                        }
+                                        OptionRow {
+                                            label: "包含触发器定义";
+                                            checked: root.schema-triggers;
+                                            toggled(v) => { root.schema-triggers = v; }
+                                        }
+                                        OptionRow {
+                                            label: "包含序列";
+                                            checked: root.schema-seq;
+                                            toggled(v) => { root.schema-seq = v; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "细节"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "主键"; checked: root.schema-pk; toggled(v) => { root.schema-pk = v; } }
+                                        OptionRow { label: "外键与级联动作"; checked: root.schema-fk; toggled(v) => { root.schema-fk = v; } }
+                                        OptionRow { label: "索引"; checked: root.schema-idx; toggled(v) => { root.schema-idx = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "检查约束"; checked: root.schema-checks; toggled(v) => { root.schema-checks = v; } }
+                                        OptionRow { label: "默认值"; checked: root.schema-defaults; toggled(v) => { root.schema-defaults = v; } }
+                                        OptionRow { label: "注释（MS_Description）"; checked: root.schema-desc; toggled(v) => { root.schema-desc = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "行数估算"; checked: root.schema-rows; toggled(v) => { root.schema-rows = v; } }
+                                        OptionRow {
+                                            label: "拆分为多文件";
+                                            checked: root.schema-split;
+                                            enabled: root.schema-format == 0;
+                                            toggled(v) => { root.schema-split = v; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PrimaryButton {
+                                label: "生成结构文档";
+                                min-width: 150px;
+                                enabled: root.connected && root.schema-dir != "" && !root.running;
+                                clicked => { root.start-schema-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "预览";
+                                enabled: root.connected && !root.running;
+                                min-width: 88px;
+                                clicked => { root.schema-preview-clicked(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+
+                        if root.schema-preview != "" : Card {
+                            height: 340px;
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 32px;
+                                    background: Theme.nav-bg;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        Text {
+                                            text: "预览";
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    content-width: self.width - 18px;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        Text {
+                                            text: root.schema-preview;
+                                            font-family: "Menlo";
+                                            font-size: 11px;
+                                            color: Theme.text;
+                                            wrap: word-wrap;
+                                            horizontal-alignment: left;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============ 3. 数据导出 ============
+                if root.nav-index == 3 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "数据导出"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "输出"; }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text { text: "目录"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        LineEdit { text <=> root.export-dir; height: 30px; placeholder-text: "选择输出文件夹"; }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton { label: "浏览"; width: 72px; clicked => { root.export-browse-clicked(); } }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton {
+                                            label: "打开";
+                                            width: 64px;
+                                            enabled: root.export-dir != "";
+                                            clicked => { root.open-dir-clicked(); }
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "格式";
+                                        items: ["CSV", "TSV", "JSON 数组", "JSON Lines", "SQL INSERT", "SQL 完整脚本", "Excel"];
+                                        index <=> root.export-format;
+                                        horizontal-stretch: 2;
+                                    }
+                                    LabeledCombo {
+                                        label: "文件组织";
+                                        items: ["每表一个文件", "合并为一个文件"];
+                                        index <=> root.export-scope;
+                                        horizontal-stretch: 1;
+                                    }
+                                    LabeledCombo {
+                                        label: "内容";
+                                        items: ["结构与数据", "仅结构", "仅数据"];
+                                        index <=> root.export-what;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "分隔符";
+                                        items: ["逗号", "制表符", "分号", "竖线"];
+                                        index <=> root.export-delimiter;
+                                        enabled: root.export-format == 0;
+                                        horizontal-stretch: 1;
+                                    }
+                                    LabeledInput {
+                                        label: "NULL 表示";
+                                        text <=> root.export-null;
+                                        horizontal-stretch: 1;
+                                    }
+                                    NumberInput { label: "每批行数"; text <=> root.export-batch; horizontal-stretch: 1; }
+                                    LabeledInput {
+                                        label: "文件名前缀";
+                                        text <=> root.export-file-prefix;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "筛选"; }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledInput {
+                                        label: "WHERE 条件";
+                                        text <=> root.export-where;
+                                        placeholder: "CreateDate >= '2024-01-01' AND Status = 1";
+                                        horizontal-stretch: 3;
+                                    }
+                                    NumberInput {
+                                        label: "每表最多行数（0 不限）";
+                                        text <=> root.export-limit;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                LabeledInput {
+                                    label: "排除列（逗号分隔）";
+                                    text <=> root.export-exclude;
+                                    placeholder: "PasswordHash, RowVersion";
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "选项"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "包含列标题"; checked: root.export-header; toggled(v) => { root.export-header = v; } }
+                                        OptionRow { label: "字段强制加引号"; checked: root.export-quote-all; toggled(v) => { root.export-quote-all = v; } }
+                                        OptionRow { label: "UTF-8 BOM"; checked: root.export-bom; toggled(v) => { root.export-bom = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "生成 DROP TABLE"; checked: root.export-drop; toggled(v) => { root.export-drop = v; } }
+                                        OptionRow { label: "保留 IDENTITY 插入"; checked: root.export-identity; toggled(v) => { root.export-identity = v; } }
+                                        OptionRow { label: "生成 CREATE DATABASE"; checked: root.export-create-db; toggled(v) => { root.export-create-db = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "对象名带 schema 前缀"; checked: root.export-schema-qualified; toggled(v) => { root.export-schema-qualified = v; } }
+                                        OptionRow {
+                                            label: "gzip 压缩";
+                                            enabled: root.export-format != 6;
+                                            checked: root.export-gzip;
+                                            toggled(v) => { root.export-gzip = v; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.export-format == 6 : Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "Excel"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "冻结首行"; checked: root.excel-freeze; toggled(v) => { root.excel-freeze = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "自适应列宽"; checked: root.excel-autofit; toggled(v) => { root.excel-autofit = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "表头加粗"; checked: root.excel-bold; toggled(v) => { root.excel-bold = v; } }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PrimaryButton {
+                                label: "开始导出";
+                                min-width: 140px;
+                                enabled: root.connected && root.selected-count > 0 && !root.running && root.export-dir != "";
+                                clicked => { root.start-export-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "预览 SQL";
+                                enabled: root.connected && root.selected-count > 0 && !root.running;
+                                min-width: 100px;
+                                clicked => { root.export-preview-clicked(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+                    }
+                }
+
+                // ============ 4. BAK 备份 ============
+                if root.nav-index == 4 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "BAK 备份"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "目标"; }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "类型";
+                                        items: ["完整备份", "差异备份", "事务日志备份"];
+                                        index <=> root.backup-kind;
+                                        width: 200px;
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 2;
+                                        Text { text: "服务器端目录"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        LineEdit {
+                                            text <=> root.backup-dir;
+                                            height: 30px;
+                                            placeholder-text: "/var/opt/mssql/backup";
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton {
+                                            label: "取默认";
+                                            width: 82px;
+                                            enabled: root.connected;
+                                            clicked => { root.backup-dir-query-clicked(); }
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledInput {
+                                        label: "文件名（留空自动生成）";
+                                        text <=> root.backup-file;
+                                        placeholder: "SalesDB_full.bak";
+                                        horizontal-stretch: 2;
+                                    }
+                                    LabeledInput {
+                                        label: "描述";
+                                        text <=> root.backup-desc;
+                                        horizontal-stretch: 2;
+                                    }
+                                    NumberInput { label: "进度间隔 %"; text <=> root.backup-stats; width: 110px; }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "选项"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "压缩"; checked: root.backup-compress; toggled(v) => { root.backup-compress = v; } }
+                                        OptionRow { label: "校验和"; checked: root.backup-checksum; toggled(v) => { root.backup-checksum = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "覆盖已有文件"; checked: root.backup-init; toggled(v) => { root.backup-init = v; } }
+                                        OptionRow { label: "仅复制备份"; checked: root.backup-copy-only; toggled(v) => { root.backup-copy-only = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "备份后校验"; checked: root.backup-verify; toggled(v) => { root.backup-verify = v; } }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PrimaryButton {
+                                label: "开始备份";
+                                min-width: 140px;
+                                enabled: root.connected && root.backup-dir != "" && !root.running;
+                                clicked => { root.start-backup-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "备份历史";
+                                enabled: root.connected && !root.running;
+                                min-width: 100px;
+                                clicked => { root.backup-history-clicked(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+
+                        if root.backup-info != "" : Card {
+                            height: 260px;
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 32px;
+                                    background: Theme.nav-bg;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        Text {
+                                            text: "备份历史";
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    content-width: self.width - 18px;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        Text {
+                                            text: root.backup-info;
+                                            font-family: "Menlo";
+                                            font-size: 11px;
+                                            color: Theme.text;
+                                            wrap: no-wrap;
+                                            horizontal-alignment: left;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============ 5. 数据导入 ============
+                if root.nav-index == 5 : ScrollView {
+                    width: parent.width;
+                    height: parent.height;
+                    content-width: self.width;
+
+                    VerticalLayout {
+                        alignment: start;
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 24px;
+                        spacing: 14px;
+
+                        PageTitle { text: "数据导入"; }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "来源"; }
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        horizontal-stretch: 1;
+                                        Text { text: "文件或目录"; font-size: 11px; color: Theme.text-3; height: 14px; vertical-alignment: center; }
+                                        LineEdit { text <=> root.import-path; height: 30px; placeholder-text: "选择文件或包含数据文件的目录"; }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton { label: "选文件"; width: 76px; clicked => { root.import-browse-file-clicked(); } }
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton { label: "选目录"; width: 76px; clicked => { root.import-browse-dir-clicked(); } }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "源格式";
+                                        items: ["自动识别", "CSV", "TSV", "JSON / NDJSON", "Excel"];
+                                        index <=> root.import-format;
+                                        horizontal-stretch: 2;
+                                    }
+                                    LabeledInput {
+                                        label: "通配符";
+                                        text <=> root.import-glob;
+                                        placeholder: "*_2024*.csv";
+                                        horizontal-stretch: 2;
+                                    }
+                                    VerticalLayout {
+                                        spacing: 4px;
+                                        Text { text: " "; font-size: 11px; height: 14px; }
+                                        SecondaryButton {
+                                            label: "扫描";
+                                            min-width: 96px;
+                                            enabled: root.import-path != "" && !root.running;
+                                            clicked => { root.scan-import-clicked(); }
+                                        }
+                                    }
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "递归子目录"; checked: root.import-recursive; toggled(v) => { root.import-recursive = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "Excel 每个 Sheet 一张表"; checked: root.import-all-sheets; toggled(v) => { root.import-all-sheets = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "首行是列标题"; checked: root.import-header; toggled(v) => { root.import-header = v; } }
+                                    }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+                                SectionTitle { text: "目标"; }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledInput {
+                                        label: "目标表（单文件时生效）";
+                                        text <=> root.import-target;
+                                        placeholder: "dbo.Users";
+                                        horizontal-stretch: 2;
+                                    }
+                                    LabeledInput {
+                                        label: "Schema";
+                                        text <=> root.import-schema;
+                                        placeholder: "dbo";
+                                        width: 120px;
+                                    }
+                                    LabeledInput {
+                                        label: "剥离前缀";
+                                        text <=> root.import-strip-prefix;
+                                        horizontal-stretch: 1;
+                                    }
+                                    LabeledInput {
+                                        label: "剥离后缀";
+                                        text <=> root.import-strip-suffix;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                HorizontalLayout {
+                                    spacing: 12px;
+                                    LabeledCombo {
+                                        label: "同名表已存在";
+                                        items: ["追加数据", "先清空", "跳过该表", "中止任务"];
+                                        index <=> root.import-on-existing;
+                                        horizontal-stretch: 1;
+                                    }
+                                    LabeledCombo {
+                                        label: "列映射";
+                                        items: ["按列名", "按列顺序"];
+                                        index <=> root.import-column-mode;
+                                        horizontal-stretch: 1;
+                                    }
+                                    NumberInput { label: "每批行数"; text <=> root.import-batch; horizontal-stretch: 1; }
+                                    LabeledInput {
+                                        label: "NULL 文本";
+                                        text <=> root.import-null;
+                                        horizontal-stretch: 1;
+                                    }
+                                    NumberInput { label: "最大错误数"; text <=> root.import-max-errors; horizontal-stretch: 1; }
+                                }
+                            }
+                        }
+
+                        Card {
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 10px;
+                                SectionTitle { text: "选项"; }
+                                HorizontalLayout {
+                                    spacing: 28px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "事务包裹"; checked: root.import-transaction; toggled(v) => { root.import-transaction = v; } }
+                                        OptionRow { label: "自动建表"; checked: root.import-create-table; toggled(v) => { root.import-create-table = v; } }
+                                    }
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 0px;
+                                        OptionRow { label: "出错跳过继续"; checked: root.import-skip-errors; toggled(v) => { root.import-skip-errors = v; } }
+                                        OptionRow { label: "导入前清空"; checked: root.import-truncate; toggled(v) => { root.import-truncate = v; } }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.plan-count > 0 : Card {
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 32px;
+                                    background: Theme.nav-bg;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 10px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: root.plan-count + " 个任务";
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                        }
+                                        SecondaryButton {
+                                            label: "清空";
+                                            min-width: 60px;
+                                            height: 24px;
+                                            clicked => { root.plan-clear-clicked(); }
+                                        }
+                                    }
+                                }
+                                for p[i] in root.import-plan : Rectangle {
+                                    height: 30px;
+                                    background: plan-ta.has-hover ? Theme.nav-bg : transparent;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        spacing: 10px;
+                                        Rectangle {
+                                            width: 15px;
+                                            height: 15px;
+                                            border-radius: 3px;
+                                            border-width: 1px;
+                                            border-color: p.enabled ? Theme.accent : Theme.border-strong;
+                                            background: p.enabled ? Theme.accent : Theme.card;
+                                            Text {
+                                                text: "✓";
+                                                color: #ffffff;
+                                                font-size: 10px;
+                                                font-weight: 700;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                visible: p.enabled;
+                                            }
+                                        }
+                                        Text {
+                                            text: p.format;
+                                            font-size: 11px;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                            width: 40px;
+                                        }
+                                        Text {
+                                            text: p.note;
+                                            font-size: 12px;
+                                            color: Theme.text-2;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: p.target;
+                                            font-size: 12px;
+                                            color: Theme.text;
+                                            vertical-alignment: center;
+                                            width: 200px;
+                                            overflow: elide;
+                                        }
+                                    }
+                                    plan-ta := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.plan-toggled(i); }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PrimaryButton {
+                                label: "开始导入";
+                                min-width: 140px;
+                                enabled: root.connected && root.import-path != "" && !root.running && (root.plan-count > 0 || root.import-target != "");
+                                clicked => { root.start-import-clicked(); }
+                            }
+                            SecondaryButton {
+                                label: "预览数据";
+                                enabled: root.import-path != "" && !root.running;
+                                min-width: 100px;
+                                clicked => { root.import-preview-clicked(); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                        }
+
+                        if root.import-preview != "" : Card {
+                            height: 240px;
+                            VerticalLayout {
+                                spacing: 0px;
+                                Rectangle {
+                                    height: 32px;
+                                    background: Theme.nav-bg;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        Text {
+                                            text: "数据预览";
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            color: Theme.text-3;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    content-width: self.width - 18px;
+                                    VerticalLayout {
+                                        padding: 14px;
+                                        Text {
+                                            text: root.import-preview;
+                                            font-family: "Menlo";
+                                            font-size: 11px;
+                                            color: Theme.text;
+                                            wrap: no-wrap;
+                                            horizontal-alignment: left;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ============ 6. 执行日志 ============
+                if root.nav-index == 6 : Rectangle {
+                    width: parent.width;
+                    height: parent.height;
+
+                    VerticalLayout {
+                        padding-left: 24px;
+                        padding-right: 24px;
+                        padding-top: 18px;
+                        padding-bottom: 20px;
+                        spacing: 10px;
+
+                        HorizontalLayout {
+                            spacing: 10px;
+                            PageTitle { text: "执行日志"; horizontal-stretch: 1; }
+                            SecondaryButton {
+                                label: "清空";
+                                min-width: 64px;
+                                height: 28px;
+                                clicked => { root.clear-log-clicked(); }
+                            }
+                        }
+
+                        Rectangle {
+                            vertical-stretch: 1;
+                            border-radius: 8px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: Theme.card;
+                            clip: true;
+                            ScrollView {
+                                content-width: self.width - 18px;
+                                VerticalLayout {
+                                    padding-left: 14px;
+                                    padding-right: 14px;
+                                    padding-top: 12px;
+                                    padding-bottom: 12px;
+                                    Text {
+                                        text: root.log-text;
+                                        font-family: "Menlo";
+                                        font-size: 11px;
+                                        color: Theme.text-2;
+                                        wrap: word-wrap;
+                                        horizontal-alignment: left;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ================= 状态栏 =================
+        Rectangle {
+            height: 42px;
+            background: Theme.card;
+            border-width: 1px;
+            border-color: Theme.border;
+
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 14px;
+
+                if root.running : ProgressIndicator {
+                    width: 160px;
+                    height: 4px;
+                    progress: root.progress;
+                }
+
+                Text {
+                    text: root.progress-text;
+                    font-size: 12px;
+                    color: Theme.text-2;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+
+                if root.rows-text != "" : Text {
+                    text: root.rows-text;
+                    font-size: 11px;
+                    color: Theme.text-3;
+                    vertical-alignment: center;
+                }
+                if root.bytes-text != "" : Text {
+                    text: root.bytes-text;
+                    font-size: 11px;
+                    color: Theme.text-3;
+                    vertical-alignment: center;
+                }
+
+                SecondaryButton {
+                    label: "取消";
+                    danger: true;
+                    height: 26px;
+                    min-width: 64px;
+                    visible: root.running;
+                    clicked => { root.cancel-clicked(); }
+                }
+            }
+        }
+    }
+}
